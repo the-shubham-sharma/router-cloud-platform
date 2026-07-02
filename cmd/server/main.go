@@ -36,7 +36,6 @@ func main() {
 	worker.Pool = worker.NewHeartbeatWorkerPool(5, 100)
 	worker.Pool.Start()
 
-	// Start offline device detector
 	alert.StartOfflineDetector()
 
 	r := gin.Default()
@@ -82,6 +81,13 @@ func main() {
 		dashboard.GET("/summary", handlers.GetDashboardSummary)
 	}
 
+	admin := r.Group("/admin", middleware.AuthRequired(), middleware.AdminOnly())
+	{
+		admin.GET("/devices", handlers.AdminGetAllDevices)
+		admin.GET("/users", handlers.AdminGetAllUsers)
+		admin.PUT("/users/:id/promote", handlers.AdminPromoteUser)
+	}
+
 	r.GET("/ws", ws.ServeWS)
 
 	srv := &http.Server{
@@ -111,11 +117,4 @@ func main() {
 	}
 
 	log.Println("Server stopped cleanly")
-	// Admin routes
-admin := r.Group("/admin", middleware.AuthRequired(), middleware.AdminOnly())
-{
-    admin.GET("/devices", handlers.AdminGetAllDevices)
-    admin.GET("/users", handlers.AdminGetAllUsers)
-    admin.PUT("/users/:id/promote", handlers.AdminPromoteUser)
-}
 }
