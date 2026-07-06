@@ -20,6 +20,7 @@ type Config struct {
 	RedisPort      string
 	JWTSecret      string
 	JWTExpiryHours int
+	RabbitMQURL    string
 }
 
 var App *Config
@@ -43,6 +44,7 @@ func Load() {
 		RedisPort:      getEnv("REDIS_PORT", "6379"),
 		JWTSecret:      getEnv("JWT_SECRET", "secret"),
 		JWTExpiryHours: hours,
+		RabbitMQURL:    getEnv("RABBITMQ_URL", "amqp://rcpuser:rcppassword@localhost:5672/"),
 	}
 
 	log.Println("Config loaded successfully")
