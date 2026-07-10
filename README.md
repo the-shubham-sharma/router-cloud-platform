@@ -1,8 +1,33 @@
 # Router Cloud Platform
 
-A production-grade, cloud-native backend platform for remotely managing, monitoring, and processing telemetry from thousands of simulated network devices — built with Go.
+> A production-grade, cloud-native backend platform for remotely managing, monitoring, and processing telemetry from thousands of simulated network devices — built with Go.
 
-> Built to demonstrate scalable backend engineering, distributed systems thinking, and real-world infrastructure patterns relevant to ISP and networking automation companies.
+Built to demonstrate scalable backend engineering, distributed systems thinking, and real-world infrastructure patterns relevant to ISP and networking automation companies.
+
+**Backend:** https://github.com/the-shubham-sharma/router-cloud-platform  
+**Frontend:** https://github.com/the-shubham-sharma/rcp-frontend
+
+---
+
+## Screenshots
+
+### Dashboard Overview
+![Dashboard](screenshots/dashboard.png)
+
+### Device Table
+![Devices](screenshots/devices.png)
+
+### API Endpoints
+![API](screenshots/api.png)
+
+### Architecture
+![Architecture](screenshots/architecture.png)
+
+### Grafana Metrics
+![Grafana](screenshots/grafana.png)
+
+### RabbitMQ Management
+![RabbitMQ](screenshots/rabbitmq.png)
 
 ---
 
@@ -14,7 +39,7 @@ Device Simulator (Goroutines)
          ▼
   Go + Gin REST API
   ├── JWT Authentication
-  ├── Rate Limiting
+  ├── Rate Limiting (10 req/s)
   ├── CORS Middleware
   └── Prometheus Metrics
          │
@@ -23,20 +48,20 @@ Device Simulator (Goroutines)
    (heartbeat_queue)
          │
          ▼
-  Consumer Workers
+  Consumer Workers (retry x3)
          │
     ┌────┴────┐
     ▼         ▼
 PostgreSQL   Redis
-(persistent) (cache)
+(persistent) (2min TTL cache)
          │
          ▼
   WebSocket Hub
-  (live device updates)
+  (live broadcasts)
          │
          ▼
-  Grafana Dashboard
-  (Prometheus metrics)
+  Grafana + Prometheus
+  (observability)
 ```
 
 ---
@@ -54,6 +79,7 @@ PostgreSQL   Redis
 | Auth | JWT (golang-jwt/jwt) |
 | ORM | GORM |
 | Real-time | WebSocket (gorilla/websocket) |
+| Frontend | React + TypeScript + Vite + Tailwind |
 | Containerization | Docker Compose |
 
 ---
@@ -75,12 +101,13 @@ PostgreSQL   Redis
 - Rate limiting (10 req/s per IP, burst 20)
 - Worker pool (5 goroutines, queue of 100)
 - RabbitMQ message queue for heartbeat processing
-- Retry logic (3 attempts with backoff)
+- Retry logic (3 attempts with exponential backoff)
 - Prometheus metrics (`/metrics` endpoint)
 - Grafana dashboard
 - Offline device alert detector (checks every 60s)
 - Role-based access control (admin / user)
 - Admin APIs (all devices, all users, promote user)
+- React + TypeScript frontend dashboard
 
 ---
 
@@ -89,7 +116,7 @@ PostgreSQL   Redis
 ### Authentication
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
-| POST | `/auth/register` | Register user | No |
+| POST | `/auth/register` | Register user + JWT | No |
 | POST | `/auth/login` | Login + JWT | No |
 | GET | `/auth/profile` | Get profile | Yes |
 
@@ -97,31 +124,31 @@ PostgreSQL   Redis
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
 | POST | `/devices` | Register device | Yes |
-| GET | `/devices` | List devices (cached) | Yes |
+| GET | `/devices` | List devices (Redis cached) | Yes |
 | GET | `/devices/:id` | Get device | Yes |
 | PUT | `/devices/:id` | Update device | Yes |
 | DELETE | `/devices/:id` | Delete device | Yes |
 | POST | `/devices/:id/heartbeat` | Send heartbeat | Yes |
-| GET | `/devices/:id/heartbeat` | Latest heartbeat | Yes |
+| GET | `/devices/:id/heartbeat` | Latest heartbeat (cached) | Yes |
 
 ### Dashboard
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
 | GET | `/dashboard/summary` | Aggregated stats | Yes |
 
-### Admin
-| Method | Endpoint | Description | Auth |
-|---|---|---|---|
-| GET | `/admin/devices` | All devices | Admin |
-| GET | `/admin/users` | All users | Admin |
-| PUT | `/admin/users/:id/promote` | Promote to admin | Admin |
+### Admin (Role: admin only)
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/admin/devices` | All devices across users |
+| GET | `/admin/users` | All users |
+| PUT | `/admin/users/:id/promote` | Promote user to admin |
 
 ### System
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/health` | Health check |
 | GET | `/metrics` | Prometheus metrics |
-| GET | `/ws` | WebSocket (token param) |
+| GET | `/ws?token=JWT` | WebSocket live events |
 
 ---
 
@@ -131,28 +158,28 @@ PostgreSQL   Redis
 router-cloud-platform/
 ├── cmd/
 │   └── server/
-│       └── main.go              # Entry point
+│       └── main.go              # Entry point, routes, graceful shutdown
 ├── internal/
 │   ├── alert/
-│   │   └── detector.go          # Offline device detection
+│   │   └── detector.go          # Offline device detection (60s ticker)
 │   ├── cache/
 │   │   └── redis.go             # Redis connection
 │   ├── config/
-│   │   └── config.go            # Environment config
+│   │   └── config.go            # Environment config loader
 │   ├── database/
-│   │   └── database.go          # PostgreSQL + auto-migrate
+│   │   └── database.go          # PostgreSQL + GORM auto-migrate
 │   ├── handlers/
+│   │   ├── admin.go             # Admin-only handlers
 │   │   ├── auth.go              # Auth handlers
-│   │   ├── admin.go             # Admin handlers
-│   │   ├── dashboard.go         # Dashboard handlers
-│   │   ├── device.go            # Device handlers
-│   │   └── heartbeat.go         # Heartbeat handlers
+│   │   ├── dashboard.go         # Dashboard summary
+│   │   ├── device.go            # Device CRUD
+│   │   └── heartbeat.go         # Heartbeat ingestion
 │   ├── metrics/
-│   │   └── prometheus.go        # Custom Prometheus metrics
+│   │   └── prometheus.go        # Custom Prometheus counters/gauges
 │   ├── middleware/
 │   │   ├── auth.go              # JWT middleware
 │   │   ├── prometheus.go        # HTTP metrics middleware
-│   │   ├── ratelimiter.go       # Rate limiting
+│   │   ├── ratelimiter.go       # IP-based rate limiting
 │   │   └── rbac.go              # Role-based access control
 │   ├── models/
 │   │   ├── device.go            # Device model
@@ -160,19 +187,19 @@ router-cloud-platform/
 │   │   ├── metric.go            # Metric model
 │   │   └── user.go              # User model with roles
 │   ├── queue/
-│   │   ├── consumer.go          # RabbitMQ consumer
+│   │   ├── consumer.go          # RabbitMQ consumer + retry logic
 │   │   └── rabbitmq.go          # RabbitMQ connection + publish
 │   ├── utils/
 │   │   ├── jwt.go               # JWT generate + validate
-│   │   └── response.go          # Standard API response
+│   │   └── response.go          # Standard API response wrapper
 │   ├── websocket/
-│   │   ├── handler.go           # WebSocket handler
-│   │   └── hub.go               # WebSocket hub + broadcast
+│   │   ├── handler.go           # WebSocket upgrade + auth
+│   │   └── hub.go               # Hub pattern + broadcast
 │   └── worker/
-│       └── heartbeat_worker.go  # Worker pool
+│       └── heartbeat_worker.go  # Goroutine worker pool
 ├── docker/
 │   └── prometheus.yml           # Prometheus scrape config
-├── docker-compose.yml           # All infrastructure
+├── docker-compose.yml           # All 5 infrastructure services
 ├── .env.example                 # Environment variables template
 └── README.md
 ```
@@ -196,35 +223,47 @@ cd router-cloud-platform
 cp .env.example .env
 ```
 
-### 3. Start infrastructure
+### 3. Start all infrastructure
 ```bash
 docker compose up -d
 ```
 
-This starts:
-- PostgreSQL on `:5432`
-- Redis on `:6379`
-- RabbitMQ on `:5672` (management UI on `:15672`)
-- Prometheus on `:9090`
-- Grafana on `:3001`
+This starts 5 containers:
+| Container | Service | Port |
+|---|---|---|
+| rcp_postgres | PostgreSQL | 5432 |
+| rcp_redis | Redis | 6379 |
+| rcp_rabbitmq | RabbitMQ | 5672, 15672 |
+| rcp_prometheus | Prometheus | 9090 |
+| rcp_grafana | Grafana | 3001 |
 
 ### 4. Run the server
 ```bash
 go run cmd/server/main.go
 ```
 
-### 5. Test the API
-```bash
-# Register
-curl -X POST http://localhost:8080/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Shubham","email":"shubham@test.com","password":"123456"}'
-
-# Login
-curl -X POST http://localhost:8080/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"shubham@test.com","password":"123456"}'
+Expected output:
 ```
+Config loaded successfully
+Database connected successfully
+Database migrated successfully
+Redis connected successfully
+RabbitMQ connected successfully
+RabbitMQ consumer started
+Heartbeat worker pool started with 5 workers
+Offline device detector started
+Server starting on port 8080
+```
+
+### 5. Run the frontend
+```bash
+git clone https://github.com/the-shubham-sharma/rcp-frontend.git
+cd rcp-frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`
 
 ---
 
@@ -233,13 +272,15 @@ curl -X POST http://localhost:8080/auth/login \
 ### Prometheus
 Open `http://localhost:9090`
 
-Custom metrics exposed:
-- `rcp_heartbeats_total` — total heartbeats received
-- `rcp_active_devices` — currently online devices
-- `rcp_http_requests_total` — requests by method/path/status
-- `rcp_http_request_duration_seconds` — request latency histogram
-- `rcp_rabbitmq_messages_total` — messages published to queue
-- `rcp_worker_jobs_total` — jobs processed by worker pool
+Custom metrics:
+| Metric | Type | Description |
+|---|---|---|
+| `rcp_heartbeats_total` | Counter | Total heartbeats received |
+| `rcp_active_devices` | Gauge | Currently online devices |
+| `rcp_http_requests_total` | Counter | Requests by method/path/status |
+| `rcp_http_request_duration_seconds` | Histogram | Request latency |
+| `rcp_rabbitmq_messages_total` | Counter | Messages published to queue |
+| `rcp_worker_jobs_total` | Counter | Jobs processed by worker pool |
 
 ### Grafana
 Open `http://localhost:3001` (admin/admin)
@@ -278,25 +319,32 @@ JWT_EXPIRY_HOURS=24
 
 ## Skills Demonstrated
 
-- **Go** — goroutines, channels, worker pools, interfaces
-- **Backend Engineering** — REST APIs, WebSockets, middleware chain
-- **Distributed Systems** — message queues, async processing, caching strategies
-- **DevOps** — Docker Compose, multi-container orchestration
-- **Observability** — Prometheus metrics, Grafana dashboards
-- **Security** — JWT auth, RBAC, rate limiting
-- **Database** — PostgreSQL, GORM, auto-migration, foreign keys
-- **Reliability** — retry logic, graceful shutdown, offline detection
+- **Go** — goroutines, channels, worker pools, interfaces, error handling
+- **Backend Engineering** — REST APIs, WebSockets, middleware chain, clean architecture
+- **Distributed Systems** — message queues, async processing, caching strategies, event-driven design
+- **DevOps** — Docker Compose, multi-container orchestration, health checks
+- **Observability** — Prometheus metrics, Grafana dashboards, custom instrumentation
+- **Security** — JWT auth, RBAC, rate limiting, bcrypt password hashing
+- **Database** — PostgreSQL, GORM, auto-migration, foreign keys, UUID primary keys
+- **Reliability** — retry logic, graceful shutdown, offline detection, fallback strategies
 
 ---
 
 ## Roadmap
 
 ### V3 (Planned)
-- Kubernetes deployment
-- API Gateway
-- Distributed tracing (Jaeger)
-- AI anomaly detection on telemetry
+- Kubernetes deployment with HPA
+- API Gateway (Kong/Traefik)
+- Distributed tracing (Jaeger/OpenTelemetry)
+- AI anomaly detection on telemetry data
 - Auto-healing simulation
 - Firmware update simulation
-- CI/CD pipeline
+- CI/CD pipeline (GitHub Actions)
 - Multi-region support
+
+---
+
+## Author
+
+**Shubham Sharma**  
+GitHub: [@the-shubham-sharma](https://github.com/the-shubham-sharma)
